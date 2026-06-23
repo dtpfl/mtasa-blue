@@ -12,13 +12,6 @@ local CEF_URL_SUFFIX = "_windows32_minimal.tar.bz2"
 local CEF_VERSION = "147.0.10+gd58e84d+chromium-147.0.7727.118"
 local CEF_HASH = "b6574257645183fe948b2c9471e419a52505c4eb13593422aa25d7b826e8e4d5"
 
--- Stuck in the past for maetro
-if os.getenv("MTA_MAETRO") == "true" then
-	CEF_URL_PREFIX = "https://mirror-cdn.multitheftauto.com/vendor/cef/cef_binary_"
-	CEF_VERSION = "109.1.18+gf1c41e4+chromium-109.0.5414.120"
-	CEF_HASH = "ac78ea1e9f9d386130de16ca951acef1ba5a37ad9aef9d66f3d5f3529672c21c"
-end
-
 function make_cef_download_url()
 	return CEF_URL_PREFIX..CEF_VERSION..CEF_URL_SUFFIX
 end

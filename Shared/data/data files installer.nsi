@@ -144,11 +144,7 @@ Section "Data files" SEC01
 
 	File "${FILES_ROOT}\MTA San Andreas\mta\d3dcompiler_43.dll"
 	File "${FILES_ROOT}\MTA San Andreas\mta\d3dcompiler_47.dll"
-	!ifdef MTA_MAETRO
-		File /oname=d3dcompiler_47.dll "${FILES_ROOT}\MTA San Andreas\mta\d3dcompiler_47.maetro.dll"
-	!else
-		File "${FILES_ROOT}\MTA San Andreas\mta\d3dcompiler_47.dll"
-	!endif
+
 	File "${FILES_ROOT}\MTA San Andreas\mta\libEGL.dll"
 	File "${FILES_ROOT}\MTA San Andreas\mta\libGLESv2.dll"
 
