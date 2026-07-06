@@ -75,7 +75,34 @@ if [ "$DO_BUILD" = true ]; then
         sed -i '/<PostBuildEvent>/,/<\/PostBuildEvent>/d' "$f"
     done
 
-    echo "=== Step 3: Build client projects ==="
+    echo "=== Step 2b: Patch cryptopp.vcxproj to disable MASM (XamlTaskFactory not available under msvc-wine) ==="
+    # The server deathmatch mod links against cryptopp, which uses MASM (x64 assembly)
+    # for crypto optimizations.  msvc-wine's .NET 4.0 does not ship XamlTaskFactory,
+    # so we remove the MASM items and use the C++ fallback instead.
+    python3 -c "
+import re, sys
+path = '$SCRIPT_DIR/Build/cryptopp.vcxproj'
+try:
+    with open(path) as f: c = f.read()
+    c = c.replace('<Import Project=\"\$(VCTargetsPath)\\\\BuildCustomizations\\\\masm.props\" />\n', '')
+    c = c.replace('<Import Project=\"\$(VCTargetsPath)\\\\BuildCustomizations\\\\masm.targets\" />\n', '')
+    c = re.sub(r'  </ItemGroup>\n  <ItemGroup>\n    <Masm Include[^>]+>.*?</ItemGroup>\n', '  </ItemGroup>\n', c, flags=re.DOTALL)
+    c = c.replace('CRYPTOPP_DISABLE_SSSE3;', 'CRYPTOPP_DISABLE_SSSE3;CRYPTOPP_DISABLE_ASM;')
+    with open(path, 'w') as f: f.write(c)
+    print('cryptopp MASM patched OK')
+except FileNotFoundError:
+    print('cryptopp.vcxproj not found, skipping MASM patch')
+" 2>/dev/null || true
+
+    echo "=== Step 3: Ensure DirectX and afxres.h stubs ==="
+    # The D3DX9 headers are expected in Include/.  Also create a minimal afxres.h
+    # stub for the RC compiler (MFC is not available under msvc-wine).
+    if [ ! -f "$SCRIPT_DIR/Include/afxres.h" ]; then
+        mkdir -p "$SCRIPT_DIR/Include"
+        printf '#define IDC_STATIC  (-1)\n#include <windows.h>\n' > "$SCRIPT_DIR/Include/afxres.h"
+    fi
+
+    echo "=== Step 4: Build client projects ==="
     BUILD_PROJECTS=(
         "Client Launcher"
         "Client Core"
@@ -96,17 +123,35 @@ if [ "$DO_BUILD" = true ]; then
         DXSDK_DIR="${DXSDK_DIR:-$SCRIPT_DIR}" "$MSBUILD" "$project.vcxproj" \
             -property:Configuration="$MSBUILD_CONFIG" \
             -property:Platform=Win32 \
-            -verbosity:minimal 2>&1 | tail -1
+            -maxcpucount \
+            -verbosity:minimal 2>&1 | grep -E "error|Warning|Warning.*=>|-> |Build succeeded|Build FAILED" || true
     done
 
-    echo "=== Step 4: Copy CEF runtime files ==="
+    echo "=== Step 5: Build server components (x64) for Host Game ==="
+    SERVER_PROJECTS=(
+        "Launcher"
+        "Core"
+        "XML"
+        "Lua_Server"
+        "Deathmatch"
+    )
+    for project in "${SERVER_PROJECTS[@]}"; do
+        echo "  Building $project (x64)..."
+        DXSDK_DIR="${DXSDK_DIR:-$SCRIPT_DIR}" "$MSBUILD" "$project.vcxproj" \
+            -property:Configuration="$MSBUILD_CONFIG" \
+            -property:Platform=x64 \
+            -maxcpucount \
+            -verbosity:minimal 2>&1 | grep -E "error|Warning.*=>|-> |Build succeeded|Build FAILED" || true
+    done
+
+    echo "=== Step 6: Copy CEF runtime files ==="
     mkdir -p "$OUTPUT_DIR/mta/cef/locales"
     cp -n "$SCRIPT_DIR/vendor/cef3/cef/Release/"*.dll "$OUTPUT_DIR/mta/" 2>/dev/null || true
     cp -n "$SCRIPT_DIR/vendor/cef3/cef/Resources/icudtl.dat" "$OUTPUT_DIR/mta/" 2>/dev/null || true
     cp -n "$SCRIPT_DIR/vendor/cef3/cef/Resources/"*.pak "$OUTPUT_DIR/mta/" 2>/dev/null || true
     cp -n "$SCRIPT_DIR/vendor/cef3/cef/Resources/locales/"* "$OUTPUT_DIR/mta/cef/locales/" 2>/dev/null || true
 
-    echo "=== Step 5: Install client data files ==="
+    echo "=== Step 7: Install client data files ==="
     cp -rn "$SCRIPT_DIR/Shared/data/MTA San Andreas/"* "$OUTPUT_DIR/" 2>/dev/null || true
 fi
 
